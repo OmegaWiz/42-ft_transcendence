@@ -10,11 +10,19 @@ class Canvas {
         this.element.width = this.width;
         this.element.style.background = "black";
     }
+
+    clear() {
+        this.context.clearRect(0, 0, this.width, this.height);
+    }
+
+    toPixel(point: Point): Point {
+        return new Point(point.x, this.height - point.y);
+    }
 }
 
 class GameConfig {
-    readonly padHeight = 80;
-    readonly padWidth = 15;
+    readonly padHeight = 100;
+    readonly padWidth = 20;
     readonly padSpeed = 0.3; // pixels per millisecond
 
     readonly ballRadius = 10;
@@ -38,17 +46,62 @@ interface Coordinates {
     y: number;
 }
 
+class Angle {
+    private rad: number;
+
+    constructor(rad: number = 0) {
+        this.rad = rad;
+    }
+
+    circle() {
+        while (this.rad < 0) {
+            this.rad += Math.PI * 2;
+        }
+        while (this.rad > Math.PI * 2) {
+            this.rad -= Math.PI * 2;
+        }
+    }
+
+    setRadian(deg: number) {
+        this.rad = deg;
+    }
+    getRadian() : number {
+        this.circle();
+        return this.rad;
+    }
+
+    getDegree(): number {
+        this.circle();
+        return this.rad * 180 / Math.PI;
+    }
+    setDegree(deg: number) {
+        this.rad = deg * Math.PI / 180;
+    }
+}
+
 class Point implements Coordinates {
     x: number;
     y: number;
 
-    constructor(x: number, y: number) {
-        this.x = x;
-        this.y = y;
+    constructor(x: number, y: number);
+    constructor(xy: Coordinates);
+    constructor(a: number | Coordinates, b?: number) {
+        if (typeof a === "number") {
+            this.x = a;
+            this.y = b!;
+        }
+        else {
+            this.x = a.x;
+            this.y = a.y;
+        }
     }
 
     static zero(): Point {
         return new Point(0, 0);
+    }
+
+    get str(): string {
+        return `(${this.x}, ${this.y})`;
     }
 
     distanceTo(point: Coordinates): number {
@@ -57,163 +110,217 @@ class Point implements Coordinates {
         return Math.sqrt(dx * dx + dy * dy);
     }
 
-    translate(vector: Vector): Point {
-        return new Point(this.x + vector.direction.x, this.y + vector.direction.y);
-    }
-
     isEqual(point: Coordinates): boolean {
         return epsilonEq(this.x, point.x) && epsilonEq(this.y, point.y);
     }
 
+    translate(direction: Coordinates): Point {
+        return new Point(this.x + direction.x, this.y + direction.y);
+    }
+
+    multiply(scalar: number): Point {
+        return new Point(this.x * scalar, this.y * scalar);
+    }
 }
 
 class Vector {
-    origin: Point;
-    direction: Coordinates;
+    ori: Point;
+    end: Point;
 
-    constructor(origin: Point = new Point(0, 0), direction: Coordinates = { x: 1, y: 0 }) {
-        this.origin = origin;
-        this.direction = { x: direction.x, y: direction.y };
-    }
-
-    static random(scale: number = 1) : Vector {
-        const angle = Math.random() * 2 * Math.PI; // Random angle
-        const x = Math.cos(angle) * scale;
-        const y = Math.sin(angle) * scale;
-        return new Vector(new Point(0, 0), { x: x, y: y });
-    }
-
-    get unit() : Vector {
-        const length = Math.sqrt(this.direction.x * this.direction.x + this.direction.y * this.direction.y);
-        if (epsilonEq(length, 0)) {
-            return new Vector(new Point(0, 0), { x: 0, y: 0 });
+    constructor(ori: Point, end: Point);
+    constructor(dir: Coordinates);
+    constructor(oriOrDir: Coordinates | Point, end?: Point) {
+        if (oriOrDir instanceof Point) {
+            this.ori = oriOrDir;
+            this.end = new Point(end!.x, end!.y);
+        } else {
+            this.ori = Point.zero();
+            this.end = new Point(oriOrDir.x, oriOrDir.y);
         }
-        return new Vector(new Point(0, 0), {
-            x: this.direction.x / length,
-            y: this.direction.y / length
-        });
     }
 
-    scale(scalar: number) : Vector {
-        return new Vector(this.origin, {
-            x: this.direction.x * scalar,
-            y: this.direction.y * scalar
-        });
+    static i(): Vector {
+        return new Vector({ x: 1, y: 0 });
+    }
+    static j(): Vector {
+        return new Vector({ x: 0, y: 1 });
+    }
+    static zero(): Vector {
+        return new Vector({x: 0, y: 0});
     }
 
-    add(vector: Vector) : Vector {
-        return new Vector(this.origin, {
-            x: this.direction.x + vector.direction.x,
-            y: this.direction.y + vector.direction.y
-        });
+    get direction(): Coordinates {
+        return { x: this.end.x - this.ori.x, y: this.end.y - this.ori.y };
     }
-
-    get neg() : Vector {
-        return new Vector(this.origin, {
-            x: -this.direction.x,
-            y: -this.direction.y
-        });
+    get str(): string {
+        return `<${this.direction.x}, ${this.direction.y}>`;
     }
-
-    isEqual(vector: Vector): boolean {
-        let x1 = this.direction.x;
-        let y1 = this.direction.y;
-        let x2 = vector.direction.x;
-        let y2 = vector.direction.y;
-        return this.origin.isEqual(vector.origin) && (
-            (epsilonEq(x1, x2) && epsilonEq(y1, y2)) ||
-            (epsilonEq(x1, -x2) && epsilonEq(y1, -y2))
-        )
-    }
-
-    get norm() : number {
+    get length(): number {
         return Math.sqrt(this.direction.x * this.direction.x + this.direction.y * this.direction.y);
     }
+    get unit(): Vector {
+        const length = this.length;
+        if (epsilonEq(length, 0)) {
+            return new Vector(this.ori, this.ori);
+        }
+        const newDirX = this.direction.x / length;
+        const newDirY = this.direction.y / length;
+        return new Vector(this.ori, this.ori.translate({x: newDirX, y: newDirY}));
+    }
+    get neg(): Vector {
+        return new Vector(this.end, this.ori);
+    }
+    get theta(): Angle {
+        if (epsilonEq(this.length, 0)) {
+            return new Angle();
+        }
+        else {
+            return new Angle(Math.asin(this.direction.y / this.length));
+        }
+    }
 
-    dot(vector: Vector): number {
-        return this.direction.x * vector.direction.x + this.direction.y * vector.direction.y;
+    resetOri(): Vector {
+        return new Vector(this.direction);
+    }
+
+    add(vector: Vector): Vector {
+        const newEnd = this.end.translate(vector.direction);
+        return new Vector(this.ori, newEnd);
+    }
+
+    scale(scalar: number): Vector {
+        if (scalar === 0) {
+            return new Vector(this.ori, this.ori);
+        }
+        let s = (scalar > 0) ? scalar : scalar * -1;
+        let dir = this.direction;
+        dir.x *= s;
+        dir.y *= s;
+        if (scalar > 0) {
+            return new Vector(this.ori, this.ori.translate(dir));
+        }
+        else {
+            return new Vector(this.ori.translate(dir), this.ori);
+        }
+    }
+
+    isEqual(other: Vector): boolean {
+        return epsilonEq(this.direction.x, other.direction.x) && epsilonEq(this.direction.y, other.direction.y);
+    }
+
+    dot(other: Vector): number {
+        return (this.direction.x * other.direction.x) + (this.direction.y * other.direction.y);
     }
 }
 
 class Line {
-    start: Point;
+    ori: Point;
     end: Point;
 
-    constructor(start: Point, end: Point) {
-        this.start = start;
+    constructor(ori: Point, end: Point) {
+        this.ori = ori;
         this.end = end;
     }
 
-    get a(): number {
-        return this.end.y - this.start.y;
+    get isVertical(): boolean {
+        return epsilonEq(this.ori.x, this.end.x);
     }
-    get b(): number {
-        return this.start.x - this.end.x;
+    get m(): number {
+        if (this.isVertical) {
+            return Infinity;
+        }
+        return((this.ori.y - this.end.y) / (this.ori.x - this.end.x));
     }
     get c(): number {
-        return (this.end.x * this.start.y) - (this.start.x * this.end.y);
-    }
-    get slope(): number {
-        if (epsilonEq(this.end.x, this.start.x)) {
-            return Infinity; // Vertical line
+        if (this.isVertical) {
+            return this.ori.x;
         }
-        return (this.end.y - this.start.y) / (this.end.x - this.start.x);
+        return (this.ori.y - (this.m * this.ori.x));
     }
-    get intercept(): number {
-        if (epsilonEq(this.end.x, this.start.x)) {
-            return this.start.x; // Vertical line, return x-intercept
-        }
-        return this.start.y - (this.slope * this.start.x); // y-intercept
-    }
-
-    // Returns a linear equation of the form ax + by + c = 0
     get linearEquation(): (x: number, y: number) => number {
+        if (this.isVertical) {
+            return (x: number, y: number) => {
+                return x - this.c
+            }
+        }
         return (x: number, y: number) => {
-            return this.a * x + this.b * y + this.c;
+            return (this.m * x) - y + this.c;
         }
     }
-
-    get eqString(): string {
-        return `${this.a}x + ${this.b}y + ${this.c} = 0`;
+    get direction(): Vector {
+        return new Vector(this.ori, this.end).unit;
     }
-
-    get normal(): Vector {
-        const dx = -this.b;
-        const dy = this.a;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        if (epsilonEq(length, 0)) {
-            return new Vector(this.start, { x: 0, y: 0 });
+    get str(): string {
+        if (this.isVertical) {
+            return `x = ${this.c}`;
         }
-        // Normal vector is perpendicular to the line
-        return new Vector(this.start, {
-            x: -dy / length,
-            y: dx / length
-        });
-    }
-
-    solveForY(point: Coordinates): number {
-        if (epsilonEq(this.b, 0)) return point.y; // Vertical line, return y directly
-        return (this.c - this.a * point.x) / this.b; // Solve for y
+        else {
+            return `y = ${this.m}*x + ${this.c}`;
+        }
     }
 
     hasPoint(point: Point): boolean {
-        return epsilonEq(0, this.linearEquation(point.x, point.y));
+        if ((this.isVertical)) {
+            return epsilonEq(point.x, this.ori.x);
+        }
+        else {
+            return (epsilonEq(point.y, (this.m * point.x) + this.c));
+        }
+    }
+
+    // #########
+    projection(point: Point): Point {
+        if (this.hasPoint(point)) {
+            return point;
+        }
+        const ab = new Vector(this.ori, this.end);
+        const ap = new Vector(this.ori, point);
+        const ad = ab.scale(ab.dot(ap) / ab.dot(ab));
+        const d = this.ori.translate(ad.direction);
+        return d;
     }
 
     intersection(other: Line): Point | null {
-        if (epsilonEq(this.slope, other.slope)) {
-            return null; // Lines are parallel, no intersection
+        if (this.isVertical) {
+            if (other.isVertical) {
+                return null;
+            }
+            const newX = this.c;
+            const newY = (other.m) * newX + other.c;
+            return new Point(newX, newY);
         }
-        const x = ((this.c * other.b) - (other.c * this.b)) / ((other.a * this.b) - (this.a * other.b));
-        const y = -1 * ((this.a * x) + this.c) / this.b; // Solve for y using the first line's equation
-        const intersectionPoint = new Point(x, y);
-        return intersectionPoint;
+        else {
+            if (epsilonEq(this.m, other.m)) {
+                return null; // Lines are parallel, no intersection
+            }
+            if (other.isVertical) {
+                const newX = other.c;
+                const newY = (this.m) * newX + this.c;
+                return new Point(newX, newY);
+            }
+            const newX = (other.c - this.c) / (this.m - other.m);
+            const newY = (this.m) * newX + this.c;
+            return new Point(newX, newY);
+        }
+    }
+
+    distance(point: Point): number {
+        return (this.linearEquation(point.x, point.y));
+    }
+
+    t(point: Point): number | null {
+        if (!this.hasPoint(point)) {
+            return null;
+        }
+        return (point.x - this.ori.x) / this.direction.direction.x;
     }
 
     draw(canvas: Canvas) {
+        const p1 = canvas.toPixel(this.ori);
+        const p2 = canvas.toPixel(this.end);
         canvas.context.beginPath();
-        canvas.context.moveTo(this.start.x, this.start.y);
-        canvas.context.lineTo(this.end.x, this.end.y);
+        canvas.context.moveTo(p1.x, p1.y);
+        canvas.context.lineTo(p2.x, p2.y);
         canvas.context.strokeStyle = "green";
         canvas.context.lineWidth = 2;
         canvas.context.stroke();
@@ -222,13 +329,30 @@ class Line {
 }
 
 class Ray extends Line {
-    direction: Vector;
+    constructor(ori: Point, end: Point);
+    constructor(ori: Point, dir: Vector);
+    constructor(ori: Point, endOrDir: Point | Vector) {
+        if (endOrDir instanceof Vector) {
+            super(ori, new Point(endOrDir.direction));
+        } else {
+            super(ori, endOrDir)
+        }
+    }
 
-    constructor(start: Coordinates, direction: Vector) {
-        const p = new Point(start.x, start.y);
-        const q = p.translate(direction);
-        super(p, q);
-        this.direction = direction.unit;
+    t(point: Point): number | null {
+        if (!super.hasPoint(point)) {
+            return null;
+        }
+        return (point.x - this.ori.x) / this.direction.direction.x;
+    }
+
+    distance(point: Point): number {
+        if (this.hasPoint(this.projection(point))) {
+            return this.linearEquation(point.x, point.y);
+        }
+        else {
+            return this.ori.distanceTo(point);
+        }
     }
 
     hasPoint(point: Point): boolean {
@@ -236,9 +360,10 @@ class Ray extends Line {
         if (!super.hasPoint(point)) {
             return false;
         }
-        const v1 = this.direction.unit;
-        const v2 = new Vector(this.start, { x: point.x - this.start.x, y: point.y - this.start.y }).unit;
-        return v1.isEqual(v2);
+        if (this.t(point)! < 0 && !epsilonEq(this.t(point)!, 0)) {
+            return false;
+        }
+        return true;
     }
 
     intersection(other: Line): Point | null {
@@ -253,17 +378,38 @@ class Ray extends Line {
 }
 
 class Segment extends Line {
+    get str(): string {
+        return `Segment(${this.ori.str}, ${this.end.str})`;
+    }
+
+    t(point: Point): number | null {
+        if (!super.hasPoint(point)) {
+            return null;
+        }
+        return (point.x - this.ori.x) / this.direction.direction.x;
+    }
     hasPoint(point: Point): boolean {
         if (!super.hasPoint(point)) {
             return false;
         }
-        const tx = (point.x - this.start.x) / (this.end.x - this.start.x);
-        const ty = (point.y - this.start.y) / (this.end.y - this.start.y);
-        if (tx < 0 || tx > 1 || ty < 0 || ty > 1) {
-            return false; // Point is outside the segment bounds
+        const tEnd = this.t(this.end);
+        if (this.t(point)! < 0 && !epsilonEq(this.t(point)!, 0)) {
+            return false;
         }
-        else
-            return true;
+        if (this.t(point)! > tEnd! && !epsilonEq(this.t(point)!, tEnd!)) {
+            return false;
+        }
+        return true;
+
+    }
+    distance(point: Point): number {
+        console.log(`Distance from ${point.str} to ${this.str}; Proj: ${this.projection(point).str}`);
+        if (this.hasPoint(this.projection(point))) {
+            return this.linearEquation(point.x, point.y);
+        }
+        else {
+            return Math.min(this.ori.distanceTo(point), this.end.distanceTo(point));
+        }
     }
 
     intersection(other: Line): Point | null {
@@ -275,8 +421,8 @@ class Segment extends Line {
     }
 
     length(): number {
-        const dx = this.end.x - this.start.x;
-        const dy = this.end.y - this.start.y;
+        const dx = this.end.x - this.ori.x;
+        const dy = this.end.y - this.ori.y;
         return Math.sqrt(dx * dx + dy * dy);
     }
 }
@@ -284,20 +430,18 @@ class Segment extends Line {
 // Pad Class
 class Pad {
     //  shape properties
-    private mid: Point;
-    readonly origin: Point;
+    mid: Point;
     readonly width: number;
     readonly height: number;
     // movement properties
     readonly maxY: number;
     readonly minY: number;
     readonly speed: number; // pixels per millisecond
-    padDirection: number; // 1 for up, -1 for down, 0 for no movement
+    padDirection: -1 | 0 | 1; // 1 for up, -1 for down, 0 for no movement
     // draw properties
     readonly color: string;
 
     constructor(mid: Point, width: number, height: number, speed: number, maxY: number, color: string = "white") {
-        this.origin = mid; // Store the original position
         this.mid = mid;
         this.width = width;
         this.height = height;
@@ -306,14 +450,6 @@ class Pad {
         this.minY = this.height / 2;
         this.maxY = maxY;
         this.padDirection = 0; // No movement initially
-    }
-
-    resetPosition() {
-        this.mid = this.origin;
-    }
-
-    setDirection(direction: number) {
-        this.padDirection = direction;
     }
 
     move(time : DOMHighResTimeStamp) {
@@ -332,20 +468,21 @@ class Pad {
 
     draw(canvas: Canvas) {
         canvas.context.fillStyle = this.color;
-        canvas.context.fillRect(this.mid.x - (this.width / 2), this.mid.y - (this.height / 2), this.width, this.height);
+        const p = canvas.toPixel(this.topleft)
+        canvas.context.fillRect(p.x, p.y, this.width, this.height);
     }
 
     get topleft(): Point {
-        return new Point(this.mid.x - (this.width / 2), this.mid.y - (this.height / 2));
-    }
-    get topright(): Point {
-        return new Point(this.mid.x + (this.width / 2), this.mid.y - (this.height / 2));
-    }
-    get bottomleft(): Point {
         return new Point(this.mid.x - (this.width / 2), this.mid.y + (this.height / 2));
     }
-    get bottomright(): Point {
+    get topright(): Point {
         return new Point(this.mid.x + (this.width / 2), this.mid.y + (this.height / 2));
+    }
+    get bottomleft(): Point {
+        return new Point(this.mid.x - (this.width / 2), this.mid.y - (this.height / 2));
+    }
+    get bottomright(): Point {
+        return new Point(this.mid.x + (this.width / 2), this.mid.y - (this.height / 2));
     }
 
     get top(): Segment {
@@ -365,78 +502,88 @@ class Pad {
 // Ball Class
 class Ball {
     //  shape properties
-    private mid: Point;
-    readonly origin: Point;
+    mid: Point;
+    readonly ori: Point;
     readonly radius: number;
     // movement properties
-    private speed: Vector;
-    readonly velocity: number; // This is the unit vector of speed
+    dir: Vector;
+    readonly speed: number;
     // draw properties
     readonly color: string;
 
-    get speedv(): Vector {
-        return this.speed;
-    }
-    get ballRay(): Ray {
-        return new Ray(this.mid, this.speed.scale(10000));
+    static randDir(side: 1 | -1) : Vector {
+        let d = Math.floor(Math.random() * 180) - 90;
+        if (side == -1) {
+            d += 180;
+        }
+        const a = new Angle;
+        a.setDegree(d);
+        return new Vector({x: Math.cos(a.getRadian()), y: Math.sin(a.getRadian())});
     }
 
-    constructor(mid: Point, radius: number, velocity: number, color: string = "white", side: number = -1) {
+    get ballRay(): Ray {
+        return new Ray(this.mid, this.dir.scale(10000));
+    }
+
+    constructor(mid: Point, radius: number, speed: number, color: string = "white", side: 1 | -1 = -1) {
+        console.log(`Ball created at ${mid.str} with radius ${radius} and speed ${speed}`);
+        this.ori = mid;
         this.mid = mid;
-        this.origin = mid; // Store the original position
         this.radius = radius;
         this.color = color;
-        this.velocity = velocity; // This is the unit vector of speed
-        this.speed = new Vector(Point.zero(), { x: 1, y: (Math.random() * 2) - 1 }).unit.scale(side * this.velocity); // Initialize speed based on side
+        this.speed = speed; // This is the unit vector of speed
+        this.dir = Ball.randDir(side);
     }
 
-    resetPosition(side = -1) {
-        this.mid = this.origin;
-        this.speed = new Vector(Point.zero(), { x: 1, y: (Math.random() * 2) - 1}).unit.scale(side * this.velocity); // Initialize speed based on side
+    resetPosition(side: 1 | -1 = -1) {
+        this.mid = this.ori;
+        this.dir = Ball.randDir(side);
     }
 
     isOnLine(line: Line): boolean {
-        const back = this.mid.translate(this.speed.unit.scale(this.radius).neg);
-        const ballRay = new Ray(back, this.speed);
-        const intersection = ballRay.intersection(line);
-        if (intersection) {
-            const distance = back.distanceTo(intersection);
-            return (distance < this.radius * 2);
-        }
-        return false;
+        return Math.abs(line.distance(this.mid)) < this.radius;
     }
 
+    // ########### UNSURE
     timeTillLine(line: Line): number {
         if (this.isOnLine(line)) {
             return 0; // If the ball is already on the line, return 0
         }
-        const ballRay = new Ray(this.mid, this.speed);
-        const intersection = ballRay.intersection(line);
+        const ballRay = new Ray(this.mid, this.dir);
+        const linePad = new Line(
+            line.ori.translate(line.direction.neg.scale(this.radius).direction),
+            line.end.translate(line.direction.scale(this.radius).direction)
+        );
+        const intersection = ballRay.intersection(linePad);
         if (intersection) {
-            const ballCorner = this.mid.translate(this.speed.unit.scale(this.radius));
-            const distance = ballCorner.distanceTo(intersection);
-            return distance / this.speed.norm; // Return time until the ball reaches the line
+            const distance = this.mid.distanceTo(intersection) - this.radius;
+            return distance / this.speed; // Return time until the ball reaches the line
         }
         return Infinity;
     }
 
     move (time: DOMHighResTimeStamp) {
-        if (time === 0) return; // Avoid division by zero
-        const distance = this.speed.scale(time);
-        this.mid = this.mid.translate(distance);
+        if (time <= 0) return; // Avoid division by zero
+        const distance = this.dir.scale(time * this.speed);
+        this.mid = this.mid.translate(distance.direction);
     }
 
+    // orthogonal projection ftw
     bounce(line: Line) {
-        console.log(`Old speed: ${this.speed.direction.x}, ${this.speed.direction.y}`);
-        const normal = line.normal.scale(2);
-        this.speed = this.speed.add(normal);
-        console.log(`Ball bounced, new speed: ${this.speed.direction.x}, ${this.speed.direction.y}`);
+        const dir = this.dir.unit;
+        const hor = line.direction.unit;
+        const ver = new Vector({x: -hor.direction.y, y: hor.direction.x}).unit; // Perpendicular vector to the line
+        const horLength = dir.dot(hor);
+        const verLength = dir.dot(ver);
+        this.dir = Vector.zero().add(hor.scale(horLength)).add(ver.scale(verLength*-1)).unit;
+        console.log(`oldDir: ${dir.str}, hor: ${hor.str}*${horLength}, ver: ${ver.str}*${verLength}, newDir: ${this.dir.str}`);
     }
 
     draw(canvas: Canvas) {
+        const p = canvas.toPixel(this.mid);
         canvas.context.fillStyle = this.color;
         canvas.context.beginPath();
-        canvas.context.arc(this.mid.x, this.mid.y, this.radius, 0, Math.PI * 2);
+        canvas.context.arc(p.x, p.y, this.radius, 0, Math.PI * 2);
         canvas.context.fill();
     }
 }
@@ -448,43 +595,65 @@ class Game {
     private canvas: Canvas;
     private config: GameConfig;
     private lastFrameTime: DOMHighResTimeStamp;
+    private gameStatus: boolean;
 
     constructor() {
+        this.gameStatus = false; // Game starts in active state
         this.canvas = new Canvas();
         this.config = new GameConfig(this.canvas.width);
         const leftPadMidPoint = new Point(this.config.protectedLeft - (this.config.padWidth / 2), this.canvas.height / 2);
-        this.leftPad = new Pad(leftPadMidPoint, this.config.padWidth, this.config.padHeight, this.config.padSpeed, this.canvas.height - this.config.padHeight);
+        this.leftPad = new Pad(
+            leftPadMidPoint,
+            this.config.padWidth,
+            this.config.padHeight,
+            this.config.padSpeed,
+            this.canvas.height - (this.config.padHeight / 2) //maxY
+        );
         const rightPadMidPoint = new Point(this.config.protectedRight + (this.config.padWidth / 2), this.canvas.height / 2);
-        this.rightPad = new Pad(rightPadMidPoint, this.config.padWidth, this.config.padHeight, this.config.padSpeed, this.canvas.height - this.config.padHeight);
-        this.ball = new Ball(new Point(this.canvas.width / 2, this.canvas.height / 2), this.config.ballRadius, this.config.ballSpeed);
-        this.lastFrameTime = 0;
+        this.rightPad = new Pad(
+            rightPadMidPoint,
+            this.config.padWidth,
+            this.config.padHeight,
+            this.config.padSpeed,
+            this.canvas.height - (this.config.padHeight / 2) //maxY
+        );
+        this.ball = new Ball(
+            new Point(this.canvas.width / 2, this.canvas.height / 2),
+            this.config.ballRadius,
+            this.config.ballSpeed
+        );
+        this.lastFrameTime = -1;
 
-        this.canvas.element.addEventListener("click", () => {
-            this.ball.resetPosition(1); // Reset ball position for left goal
-            this.leftPad.resetPosition();
-            this.rightPad.resetPosition();
-            requestAnimationFrame(this.nextFrame.bind(this));
-        });
         this.canvas.element.addEventListener("keydown", (e) => {
             if (e.key === "w") {
-                this.leftPad.setDirection(-1);
+                this.leftPad.padDirection = 1;
             } else if (e.key === "s") {
-                this.leftPad.setDirection(1);
+                this.leftPad.padDirection = -1;
             } else if (e.key === "ArrowUp") {
-                this.rightPad.setDirection(-1);
+                this.rightPad.padDirection = 1 ;
             } else if (e.key === "ArrowDown") {
-                this.rightPad.setDirection(1);
+                this.rightPad.padDirection = -1;
             }
         });
         this.canvas.element.addEventListener("keyup", (e) => {
             if (e.key === "w" || e.key === "s") {
-                this.leftPad.setDirection(0);
+                this.leftPad.padDirection = 0;
             } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-                this.rightPad.setDirection(0);
+                this.rightPad.padDirection = 0;
             }
         });
         this.canvas.element.addEventListener("keypress", (e) => {
             if (e.key === "Enter") {
+                console.log("Enter pressed");
+                this.gameStatus = !this.gameStatus;
+                if (this.gameStatus) {
+                    requestAnimationFrame(this.nextFrame.bind(this));
+                }
+            } else if (e.key === "r") {
+                this.leftPad.mid = new Point(this.config.protectedLeft - (this.config.padWidth / 2), this.canvas.height / 2);
+                this.rightPad.mid = new Point(this.config.protectedRight + (this.config.padWidth / 2), this.canvas.height / 2);
+                this.ball.resetPosition();
+                this.gameStatus = true;
                 requestAnimationFrame(this.nextFrame.bind(this));
             }
         });
@@ -493,15 +662,15 @@ class Game {
         this.canvas.element.tabIndex = 0; // Make the canvas focusable
         this.canvas.element.style.outline = "none"; // Remove default focus outline
         this.canvas.element.addEventListener("blur", () => {
-            this.leftPad.setDirection(0);
-            this.rightPad.setDirection(0);
+            this.leftPad.padDirection = 0;
+            this.rightPad.padDirection = 0;
         });
     }
 
-    get topCanvas(): Segment {
-        return new Segment(new Point(0, 0), new Point(this.canvas.width, 0));
-    }
     get bottomCanvas(): Segment {
+        return new Segment(new Point(0, 10), new Point(this.canvas.width, 10));
+    }
+    get topCanvas(): Segment {
         return new Segment(new Point(0, this.canvas.height), new Point(this.canvas.width, this.canvas.height));
     }
     get leftGoal(): Segment {
@@ -511,69 +680,107 @@ class Game {
         return new Segment(new Point(this.config.protectedRight, 0), new Point(this.config.protectedRight, this.canvas.height));
     }
 
-    nextFrame(timestamp: DOMHighResTimeStamp) {
-        if (!timestamp) timestamp = 0;
-        if (typeof this.lastFrameTime === "undefined") {
-            this.lastFrameTime = timestamp;
-        }
-        const time = timestamp - this.lastFrameTime;
-        this.lastFrameTime = timestamp;
+    drawGrid() {
+        const gridSize = 20;
+        const ctx = this.canvas.context;
+        ctx.strokeStyle = "lightgray";
+        ctx.lineWidth = 0.5;
+        ctx.font = "10px Arial";
+        ctx.fillStyle = "gray";
 
-        this.canvas.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        this.leftPad.move(time);
-        this.rightPad.move(time);
-        let ballTime = time;
-        if (this.ball.timeTillLine(this.topCanvas) <= ballTime) {
-            let t = this.ball.timeTillLine(this.topCanvas);
-            this.ball.move(t);
-            this.ball.bounce(this.topCanvas);
-            ballTime -= t;
-            console.log("Ball bounced on top canvas");
+        for (let x = 0; x <= this.canvas.width; x += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, this.canvas.height);
+            ctx.stroke();
+            if (x % (gridSize * 5) === 0) {
+                ctx.fillText(x.toString(), x + 2, this.canvas.height - 2);
+            }
         }
-        if (this.ball.timeTillLine(this.bottomCanvas) <= ballTime) {
-            let t = this.ball.timeTillLine(this.bottomCanvas);
-            this.ball.move(t);
-            this.ball.bounce(this.bottomCanvas);
-            ballTime -= t;
-            console.log("Ball bounced on bottom canvas");
-        }
-        if (this.ball.timeTillLine(this.leftPad.right) <= ballTime) {
-            let t = this.ball.timeTillLine(this.leftPad.right);
-            this.ball.move(t);
-            this.ball.bounce(this.leftPad.right);
-            ballTime -= t;
-            console.log("Ball bounced on left pad");
-        } else if (this.ball.timeTillLine(this.leftGoal) <= ballTime) {
-            console.log("Left Goal Scored!");
-            this.ball.resetPosition(1); // Reset ball position for left goal
-            ballTime = 0;
-        }
-        if (this.ball.timeTillLine(this.rightPad.left) <= ballTime) {
-            let t = this.ball.timeTillLine(this.rightPad.left);
-            this.ball.move(t);
-            this.ball.bounce(this.rightPad.left);
-            ballTime -= t;
-            console.log("Ball bounced on right pad");
-        } else if (this.ball.timeTillLine(this.rightGoal) <= ballTime) {
-            console.log("Right Goal Scored!");
-            this.ball.resetPosition(-1); // Reset ball position for right goal
-            ballTime = 0;
-        }
-        this.ball.move(ballTime);
-        ballTime = 0; // No more time left to move the ball
 
+        for (let y = 0; y <= this.canvas.height; y += gridSize) {
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(this.canvas.width, y);
+            ctx.stroke();
+            if (y % (gridSize * 5) === 0) {
+                ctx.fillText(y.toString(), 2, this.canvas.height - y - 2);
+            }
+        }
+    }
+
+    drawDebug() {
+        this.drawGrid();
         const ballRay = this.ball.ballRay;
         ballRay.draw(this.canvas);
         this.topCanvas.draw(this.canvas);
         this.bottomCanvas.draw(this.canvas);
         this.leftGoal.draw(this.canvas);
         this.rightGoal.draw(this.canvas);
+    }
 
+    drawGameElements() {
         this.leftPad.draw(this.canvas);
         this.rightPad.draw(this.canvas);
         this.ball.draw(this.canvas);
+        console.log(`Ball Position: ${this.ball.mid.str} Speed: ${this.ball.speed} Direction: ${this.ball.dir.str}`);
+    }
 
-        requestAnimationFrame(this.nextFrame.bind(this));
+    nextFrame(timestamp: DOMHighResTimeStamp) {
+        if (!timestamp) {
+            timestamp = 0;
+        }
+        if (typeof this.lastFrameTime === "undefined" || this.lastFrameTime < 0) {
+            this.lastFrameTime = timestamp;
+        }
+        const time = timestamp - this.lastFrameTime;
+        this.lastFrameTime = timestamp;
+
+        if (!this.gameStatus) {
+            this.lastFrameTime = -1;
+            console.log("Game is paused");
+            return;
+        }
+
+        this.canvas.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        this.leftPad.move(time);
+        this.rightPad.move(time);
+        let ballTime = time;
+
+        let borders: Segment[] = [this.leftPad.right, this.rightPad.left, this.topCanvas, this.bottomCanvas];
+        const goals = [this.leftGoal, this.rightGoal];
+        let flag = true;
+        for(const b of borders) {
+            const t = this.ball.timeTillLine(b);
+            console.log(`Time till line ${b.str}: ${t}. Distance: ${b.distance(this.ball.mid)}`);
+            if (t < ballTime) {
+                this.ball.move(t);
+                this.ball.bounce(b);
+                ballTime -= t;
+                flag = false;
+            }
+        }
+        for (const g in goals) {
+            const t = this.ball.timeTillLine(goals[g]);
+            console.log(`Time till line ${goals[g].str}: ${t}. Distance: ${goals[g].distance(this.ball.mid)}, isonline: ${this.ball.isOnLine(goals[g])}`);
+            if (this.ball.isOnLine(goals[g]) && flag === true) {
+                console.log("GOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOAL");
+                this.ball.resetPosition(g ? -1 : 1);
+                this.gameStatus = false;
+                break;
+            }
+        }
+        if (ballTime > 0) {
+            this.ball.move(ballTime);
+            ballTime = 0; // No more time left to move the ball
+        }
+
+        this.drawDebug();
+        this.drawGameElements();
+
+        if (this.gameStatus) {
+            requestAnimationFrame(this.nextFrame.bind(this));
+        }
     }
 }
 
