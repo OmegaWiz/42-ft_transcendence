@@ -4,18 +4,78 @@ import websocket from "@fastify/websocket";
 const fastify = Fastify();
 await fastify.register(websocket);
 
-// WebSocket route
-fastify.get("/ws", { websocket: true }, (connection, req) => {
-  console.log("Client connected");
+interface IRoom {
+  id: string;
+  clients: Set<any>;
+  state: any;
+  interval: NodeJS.Timeout;
+}
 
-  // Routine message sender
-  const interval = setInterval(() => {
-    const message = JSON.stringify({
-      type: "heartbeat",
-      timestamp: new Date().toISOString(),
-    });
-    connection.send(message);
-  }, 5000); // every 5 seconds
+class RoomManager {
+  private rooms: Map<string, IRoom>;
+
+  constructor() {
+    this.rooms = new Map();
+  }
+
+  private tick(room: IRoom) {
+    const snapshot = {
+      type: 'update',
+      timestamp: Date.now(),
+      id: room.id,
+      state: room.state,
+    };
+    const message = JSON.stringify(snapshot);
+    for (const connection of room.clients) {
+      connection.send(message);
+    }
+  }
+
+  getRoom(id: string): IRoom {
+    let room = this.rooms.get(id);
+    if (!room) {
+      room = {
+        id,
+        clients: new Set(),
+        state: { players: [] },
+        interval: setInterval(() => this.tick(room!), 5000),
+      };
+      this.rooms.set(id, room);
+      console.log(`Created new room: ${id}`);
+    }
+    return room;
+  }
+
+  addClientToRoom(roomId: string, client: any) {
+    const room = this.getRoom(roomId);
+    room.clients.add(client);
+    console.log(`Client added to room: ${roomId}`);
+  }
+
+  removeClientFromRoom(roomId: string, client: any) {
+    const room = this.rooms.get(roomId);
+    if (room) {
+      room.clients.delete(client);
+      console.log(`Client removed from room: ${roomId}`);
+      if (room.clients.size === 0) {
+        clearInterval(room.interval);
+        this.rooms.delete(roomId);
+        console.log(`Deleted empty room: ${roomId}`);
+      }
+    }
+  }
+}
+
+const roomManager = new RoomManager();
+
+// WebSocket route
+fastify.get("/ws", { websocket: true }, (connection, req: any) => {
+  console.log("Client connected");
+  const roomId = req.query.roomId || "default";
+  roomManager.addClientToRoom(roomId, connection);
+  connection.send(
+    JSON.stringify({ type: "welcome", message: `Joined room: ${roomId}` })
+  );
 
   // Handle messages from the frontend
   connection.on("message", (raw: string) => {
@@ -41,8 +101,8 @@ fastify.get("/ws", { websocket: true }, (connection, req) => {
   });
 
   connection.on("close", () => {
+    roomManager.removeClientFromRoom(roomId, connection);
     console.log("Client disconnected");
-    clearInterval(interval);
   });
 });
 

@@ -21,6 +21,8 @@
     <div class="row">
       <label for="url">Server:</label>
       <input id="url" type="text" value="ws://localhost:3000/ws" />
+      <label for="room">Room:</label>
+      <input id="room" type="text" value="default" placeholder="room id" />
       <button id="connect">Connect</button>
       <button id="disconnect" disabled>Disconnect</button>
       <span id="status">disconnected</span>
@@ -30,6 +32,7 @@
       <button id="ping" disabled>Send Ping</button>
       <input id="chatInput" type="text" placeholder="Type a chat message" />
       <button id="chatSend" disabled>Send Chat</button>
+      <button id="switchRoom" disabled title="Reconnect to new room">Switch Room</button>
     </div>
 
     <div id="log" aria-live="polite" aria-atomic="false"></div>
