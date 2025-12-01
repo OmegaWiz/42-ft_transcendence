@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebSocket Test Client</title>
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+      h1 { margin: 0 0 12px; }
+      .row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; }
+      #status { padding: 6px 10px; border-radius: 6px; background: #eee; }
+      #log { border: 1px solid #ddd; border-radius: 8px; padding: 10px; height: 240px; overflow: auto; background: #fafafa; }
+      #log pre { margin: 0; }
+      input[type="text"] { flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+      button { padding: 8px 12px; border: 1px solid #999; border-radius: 6px; background: #fff; cursor: pointer; }
+      button:disabled { opacity: 0.5; cursor: default; }
+    </style>
+  </head>
+  <body>
+    <h1>WebSocket Test Client</h1>
+    <div class="row">
+      <label for="url">Server:</label>
+      <input id="url" type="text" value="ws://localhost:3000/ws" />
+      <button id="connect">Connect</button>
+      <button id="disconnect" disabled>Disconnect</button>
+      <span id="status">disconnected</span>
+    </div>
+
+    <div class="row">
+      <button id="ping" disabled>Send Ping</button>
+      <input id="chatInput" type="text" placeholder="Type a chat message" />
+      <button id="chatSend" disabled>Send Chat</button>
+    </div>
+
+    <div id="log" aria-live="polite" aria-atomic="false"></div>
+
+    <script src="./script.js"></script>
+  </body>
+  </html>
