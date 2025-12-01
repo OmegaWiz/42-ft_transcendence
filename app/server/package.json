@@ -1,9 +1,10 @@
 {
   "name": "42-ft_transcendence",
   "version": "1.0.0",
+  "type": "module",
   "main": "demo.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/server.ts",
+    "dev": "nodemon --exec \"node --loader ts-node/esm\" src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "type-check": "tsc --noEmit",
@@ -16,7 +17,8 @@
   "dependencies": {
     "@fastify/static": "^8.2.0",
     "@fastify/websocket": "^11.2.0",
-    "fastify": "^5.5.0"
+    "fastify": "^5.5.0",
+    "y": "^0.3.2"
   },
   "devDependencies": {
     "@fastify/type-provider-typebox": "^5.2.0",

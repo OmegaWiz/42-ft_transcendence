@@ -1,8 +1,8 @@
-// CONST from window
-class Canvas {
-    readonly height = 600;
-    readonly width = 800;
-    readonly element = document.querySelector("canvas") as HTMLCanvasElement;
+import { Game } from './pong/game.js';
+
+(function () {
+    const game = new Game();
+})();
     readonly context = this.element.getContext("2d")!;
 
     constructor() {
@@ -20,7 +20,7 @@ class Canvas {
     }
 }
 
-class GameConfig {
+export class GameConfig {
     readonly padHeight = 100;
     readonly padWidth = 20;
     readonly padSpeed = 0.3; // pixels per millisecond
@@ -46,7 +46,7 @@ interface Coordinates {
     y: number;
 }
 
-class Angle {
+export class Angle {
     private rad: number;
 
     constructor(rad: number = 0) {
@@ -79,7 +79,7 @@ class Angle {
     }
 }
 
-class Point implements Coordinates {
+export class Point implements Coordinates {
     x: number;
     y: number;
 
@@ -123,7 +123,7 @@ class Point implements Coordinates {
     }
 }
 
-class Vector {
+export class Vector {
     ori: Point;
     end: Point;
 
@@ -213,7 +213,7 @@ class Vector {
     }
 }
 
-class Line {
+export class Line {
     ori: Point;
     end: Point;
 
@@ -328,7 +328,7 @@ class Line {
 
 }
 
-class Ray extends Line {
+export class Ray extends Line {
     constructor(ori: Point, end: Point);
     constructor(ori: Point, dir: Vector);
     constructor(ori: Point, endOrDir: Point | Vector) {
@@ -377,7 +377,7 @@ class Ray extends Line {
     }
 }
 
-class Segment extends Line {
+export class Segment extends Line {
     get str(): string {
         return `Segment(${this.ori.str}, ${this.end.str})`;
     }
@@ -392,22 +392,38 @@ class Segment extends Line {
         if (!super.hasPoint(point)) {
             return false;
         }
+        const tOri = this.t(this.ori);
         const tEnd = this.t(this.end);
-        if (this.t(point)! < 0 && !epsilonEq(this.t(point)!, 0)) {
+        const tSrc = this.t(point);
+        let t0, t1: number;
+        if (tOri! < tEnd!) {
+            t0 = tOri!;
+            t1 = tEnd!;
+        }
+        else {
+            t1 = tOri!;
+            t0 = tEnd!;
+        }
+        console.log(`~${t0} ${tSrc} ${t1}~`);
+        if (tSrc! < t0 && !epsilonEq(tSrc!, t0)) {
             return false;
         }
-        if (this.t(point)! > tEnd! && !epsilonEq(this.t(point)!, tEnd!)) {
+        if (tSrc! > t1 && !epsilonEq(tSrc!, t1)) {
             return false;
         }
         return true;
 
     }
     distance(point: Point): number {
-        console.log(`Distance from ${point.str} to ${this.str}; Proj: ${this.projection(point).str}`);
+        let str = `Distance from ${point.str} to ${this.str}; Proj: ${this.projection(point).str}`;
         if (this.hasPoint(this.projection(point))) {
+            str += ` ${super.str}, H= ${this.linearEquation(point.x, point.y)}`;
+            console.log(str);
             return this.linearEquation(point.x, point.y);
         }
         else {
+            str += `D= ${Math.min(this.ori.distanceTo(point), this.end.distanceTo(point))}`;
+            console.log(str);
             return Math.min(this.ori.distanceTo(point), this.end.distanceTo(point));
         }
     }
@@ -428,7 +444,7 @@ class Segment extends Line {
 }
 
 // Pad Class
-class Pad {
+export class Pad {
     //  shape properties
     mid: Point;
     readonly width: number;
@@ -500,7 +516,7 @@ class Pad {
 }
 
 // Ball Class
-class Ball {
+export class Ball {
     //  shape properties
     mid: Point;
     readonly ori: Point;
@@ -576,7 +592,7 @@ class Ball {
         const horLength = dir.dot(hor);
         const verLength = dir.dot(ver);
         this.dir = Vector.zero().add(hor.scale(horLength)).add(ver.scale(verLength*-1)).unit;
-        console.log(`oldDir: ${dir.str}, hor: ${hor.str}*${horLength}, ver: ${ver.str}*${verLength}, newDir: ${this.dir.str}`);
+        console.log(`\n\n\n|-|-|-|-|-\noldDir: ${dir.str}, hor: ${hor.str}*${horLength}, ver: ${ver.str}*${verLength}, newDir: ${this.dir.str}\n-|-|-|-|-|\n\n\n`);
     }
 
     draw(canvas: Canvas) {
@@ -588,7 +604,7 @@ class Ball {
     }
 }
 
-class Game {
+export class Game {
     private leftPad: Pad;
     private rightPad: Pad;
     private ball: Ball;
@@ -785,7 +801,7 @@ class Game {
 }
 
 // Game Screen Utitlities
-function gamePause() {
+export function gamePause() {
 	// context.clearRect(0, 0, canvasWidth, canvasHeight);
 	// context.fillStyle = "rgba(0, 0, 0, 0.5)";
 	// context.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -796,4 +812,6 @@ function gamePause() {
 	// context.fillText("Press Enter to resume", canvasWidth / 2 - 100, canvasHeight / 2 + 40);
 }
 
-const game = new Game();
+(function () {
+    const game = new Game();
+})();
