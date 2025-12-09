@@ -25,42 +25,42 @@ export class RoomManager {
 		return this.getOrCreateRoom(roomId).join(playerId);
 	}
 
-	leave(roomId: string, playerId: string): void {
+	async leave(roomId: string, playerId: string): Promise<void> {
 		const room = this.rooms.get(roomId);
 		if (room) {
-			room.leave(playerId);
+			await room.leave(playerId);
 		}
 	}
 
-	attach(roomId: string, playerId: string, conn: WebSocket): number {
+	async attach(roomId: string, playerId: string, conn: WebSocket): Promise<number> {
 		return this.getOrCreateRoom(roomId).attach(playerId, conn);
 	}
 
-	detach(roomId: string, playerId: string): void {
+	async detach(roomId: string, playerId: string): Promise<void> {
 		const room = this.rooms.get(roomId);
 		if (room) {
-			room.detach(playerId);
+			await room.detach(playerId);
 		}
 	}
 
-	play(roomId: string, playerId: string): void {
-		this.getOrCreateRoom(roomId).play(playerId);
+	async play(roomId: string, playerId: string): Promise<void> {
+		await this.getOrCreateRoom(roomId).play(playerId);
 	}
 
-	pause(roomId: string, playerId: string): void {
-		this.getOrCreateRoom(roomId).pause(playerId);
+	async pause(roomId: string, playerId: string): Promise<void> {
+		await this.getOrCreateRoom(roomId).pause(playerId);
 	}
 
-	move(roomId: string, playerId: string, direction: 1 | -1): void {
-		this.getOrCreateRoom(roomId).move(playerId, direction);
+	async move(roomId: string, playerId: string, direction: 1 | -1): Promise<void> {
+		await this.getOrCreateRoom(roomId).move(playerId, direction);
 	}
 
-	summary(roomId: string) {
+	async summary(roomId: string) {
 		const room = this.rooms.get(roomId);
 		if (!room) {
 			throw new Error(`Room ${roomId} does not exist`);
 		}
-		return room.summary;
+		return room.getSummary();
 	}
 }
 

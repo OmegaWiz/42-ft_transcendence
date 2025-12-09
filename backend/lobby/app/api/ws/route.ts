@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
 	try {
 		roomManager.join(roomId, playerId);
-		roomManager.attach(roomId, playerId, server);
+		await roomManager.attach(roomId, playerId, server);
 	} catch (error) {
 		server.close(1011, 'Unable to join room');
 		return new Response(
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
 		});
 	};
 
-	const handleClientMessage = (msg: ClientMessage) => {
+	const handleClientMessage = async (msg: ClientMessage) => {
 		switch (msg.type) {
 			case 'ping':
 				send({ type: 'pong' });
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 				break;
 			case 'play':
 				try {
-					roomManager.play(roomId, playerId);
+					await roomManager.play(roomId, playerId);
 					send({ type: 'game_started' });
 				} catch (error) {
 					sendError(error);
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
 				break;
 			case 'pause':
 				try {
-					roomManager.pause(roomId, playerId);
+					await roomManager.pause(roomId, playerId);
 					send({ type: 'game_paused' });
 				} catch (error) {
 					sendError(error);
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
 					return;
 				}
 				try {
-					roomManager.move(roomId, playerId, msg.data.direction);
+					await roomManager.move(roomId, playerId, msg.data.direction);
 				} catch (error) {
 					sendError(error);
 				}

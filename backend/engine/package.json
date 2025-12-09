@@ -1,21 +1,20 @@
 {
-  "name": "pong-engine-next",
+  "name": "pong-engine",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start"
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@flatten-js/core": "^1.6.8",
-    "next": "14.1.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0"
+    "fastify": "^4.26.0"
   },
   "devDependencies": {
-    "@types/react": "18.2.47",
-    "@types/react-dom": "18.2.18",
-    "typescript": "5.3.3"
+    "@types/node": "^20.11.5",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
   }
 }
