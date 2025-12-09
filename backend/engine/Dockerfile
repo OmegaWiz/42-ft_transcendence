@@ -9,12 +9,14 @@ FROM base as builder
 WORKDIR /app
 COPY --from=installer /app/node_modules ./node_modules
 COPY ./tsconfig.json ./tsconfig.json
-COPY ./srcs ./srcs
+COPY ./src ./src
 RUN npm run build
 
 FROM base as runner
 WORKDIR /app
 COPY --from=builder /app/dist ./dist
 COPY --from=installer /app/node_modules ./node_modules
-EXPOSE 3000
+EXPOSE 3001
+ENV PORT=3001
+ENV HOST=0.0.0.0
 CMD ["node", "dist/index.js"]

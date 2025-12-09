@@ -1,55 +1,71 @@
-# Pong Engine – Next.js Backend
+# Pong Engine Microservice
 
-This package now runs entirely on Next.js 14 route handlers and WebSockets, replacing the previous Fastify servers. The physics/gameplay logic lives in `src/lib`, while the HTTP + WS surface resides in `app/api`.
+Pure game physics service for the Pong game. This service handles all game computations including ball movement, collision detection, and scoring logic.
+
+## Architecture
+
+This is a stateless HTTP service that:
+- Creates and manages game sessions
+- Processes game physics independently
+- Exposes REST API for game operations
+- No direct WebSocket connections to clients
+
+## API Endpoints
+
+### Session Management
+- `POST /sessions` - Create a new game session
+  - Body: `{ "sessionId"?: string }` (optional)
+  - Response: `{ "sessionId": string, "message": string }`
+
+- `DELETE /sessions/:sessionId` - Delete a game session
+  - Response: `{ "message": string }`
+
+- `GET /sessions` - List all active sessions
+  - Response: `{ "sessions": GameSessionState[] }`
+
+### Game Control
+- `GET /sessions/:sessionId/state` - Get current game state
+  - Response: `GameState`
+
+- `POST /sessions/:sessionId/start` - Start game physics loop
+  - Response: `{ "message": string }`
+
+- `POST /sessions/:sessionId/stop` - Stop game physics loop
+  - Response: `{ "message": string }`
+
+- `POST /sessions/:sessionId/move` - Move paddle
+  - Body: `{ "side": "left" | "right", "direction": 1 | -1 }`
+  - Response: `{ "message": string }`
+
+- `POST /sessions/:sessionId/reset-ball` - Reset ball to center
+  - Response: `{ "message": string }`
+
+### Health
+- `GET /health` - Health check
+  - Response: `{ "status": "ok" }`
 
 ## Development
 
 ```bash
 npm install
-npm run dev   # http://localhost:3000
+npm run dev   # http://localhost:3001
 ```
 
-Build, lint, and start commands follow standard Next conventions (`npm run build`, `npm run lint`, `npm run start`).
+## Production
 
-## API Surface
-
-| Route | Method | Description |
-| --- | --- | --- |
-| `/api/health` | `GET` | Returns `{ status: "ok" }` for liveness checks. |
-| `/api/rooms` | `POST` | Creates a room and returns the identifier. |
-| `/api/rooms/[roomId]` | `GET` | Returns `RoomSummary` (players, readiness, latest game state). |
-| `/api/rooms/[roomId]/join` | `POST` | Body `{ "playerId": "p1" }`; reserves slot and echoes index. |
-| `/api/ws` | `GET` (WebSocket) | Real-time control plane supporting `ping`, `chat`, `play`, `pause`, and `move`. |
-
-### WebSocket Contract
-
-- Connect with `ws://localhost:3000/api/ws?roomId=<id>&playerId=<id>` (values auto-generate if omitted).
-- Messages mirror the previous Fastify implementation:
-  - `{ "type": "ping" }` → `{ "type": "pong" }`
-  - `{ "type": "chat", "data": { "message": "..." } }` → `echo`
-  - `{ "type": "play" }`, `{ "type": "pause" }`, `{ "type": "move", "data": { "direction": 1|-1 } }`
-- Server broadcasts `game_state` at 60 FPS while running, plus `score` events when goals are detected.
-
-## Architecture
-
-```
-src/lib/
-├── config.ts          # field/paddle/loop constants
-├── game/game-engine.ts
-├── players/player-manager.ts
-└── rooms/
-    ├── room.ts        # game loop + websocket orchestration
-    └── room-manager.ts
-app/
-├── api/...            # Next.js route handlers for REST + WebSocket
-├── layout.tsx
-└── page.tsx
+```bash
+npm run build
+npm start
 ```
 
-The `Room` loop now relies on `setTimeout` scheduling so it can run inside the Edge runtime that powers Next’s WebSocket support. All outbound communication uses the standard `WebSocket` interface (no `ws` or Fastify adapters required).
+## Docker
 
-## Migration Notes
+```bash
+docker build -t pong-engine .
+docker run -p 3001:3001 pong-engine
+```
 
-- Legacy Fastify servers (`backend/engine`, `app/engine`, `app/server/temp`) have been removed in favor of this single Next.js backend.
-- The physics/gameplay classes are unchanged, ensuring feature parity (paddle motion, scoring, chat echo, ping/pong, etc.).
-- Remember to regenerate `package-lock.json` after running `npm install` locally—the repository no longer tracks the old Fastify lockfile.
+## Environment Variables
+
+- `PORT` - Server port (default: 3001)
+- `HOST` - Server host (default: 0.0.0.0)
