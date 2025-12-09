@@ -1,113 +1,112 @@
 import Fastify from "fastify";
 import websocket from "@fastify/websocket";
+import { RoomManager } from "./lobby.js";
+import { resolve } from "path";
 
 const fastify = Fastify();
 await fastify.register(websocket);
-
-interface IRoom {
-  id: string;
-  clients: Set<any>;
-  state: any;
-  interval: NodeJS.Timeout;
-}
-
-class RoomManager {
-  private rooms: Map<string, IRoom>;
-
-  constructor() {
-    this.rooms = new Map();
-  }
-
-  private tick(room: IRoom) {
-    const snapshot = {
-      type: 'update',
-      timestamp: Date.now(),
-      id: room.id,
-      state: room.state,
-    };
-    const message = JSON.stringify(snapshot);
-    for (const connection of room.clients) {
-      connection.send(message);
-    }
-  }
-
-  getRoom(id: string): IRoom {
-    let room = this.rooms.get(id);
-    if (!room) {
-      room = {
-        id,
-        clients: new Set(),
-        state: { players: [] },
-        interval: setInterval(() => this.tick(room!), 5000),
-      };
-      this.rooms.set(id, room);
-      console.log(`Created new room: ${id}`);
-    }
-    return room;
-  }
-
-  addClientToRoom(roomId: string, client: any) {
-    const room = this.getRoom(roomId);
-    room.clients.add(client);
-    console.log(`Client added to room: ${roomId}`);
-  }
-
-  removeClientFromRoom(roomId: string, client: any) {
-    const room = this.rooms.get(roomId);
-    if (room) {
-      room.clients.delete(client);
-      console.log(`Client removed from room: ${roomId}`);
-      if (room.clients.size === 0) {
-        clearInterval(room.interval);
-        this.rooms.delete(roomId);
-        console.log(`Deleted empty room: ${roomId}`);
-      }
-    }
-  }
-}
-
-const roomManager = new RoomManager();
 
 // WebSocket route
 fastify.get("/ws", { websocket: true }, (connection, req: any) => {
   console.log("Client connected");
   const roomId = req.query.roomId || "default";
-  roomManager.addClientToRoom(roomId, connection);
+  const playerId = req.query.playerId || `player-${Date.now()}`;
+
+  RoomManager.connectRoom(roomId, connection);
   connection.send(
-    JSON.stringify({ type: "welcome", message: `Joined room: ${roomId}` })
+    JSON.stringify({ type: "welcome", message: `Joined room: ${roomId}`, playerId })
   );
 
   // Handle messages from the frontend
   connection.on("message", (raw: string) => {
     try {
-      const data = JSON.parse(raw);
-      console.log("Received from client:", data);
+      const msg = JSON.parse(raw);
 
-      if (data.type === "ping") {
-        connection.send(JSON.stringify({ type: "pong" }));
-      }
+      const { type, data } = msg;
 
-      if (data.type === "chat") {
-        connection.send(
-          JSON.stringify({
-            type: "echo",
-            message: `You said: ${data.message}`,
-          })
-        );
+      switch(type) {
+        case 'ping':
+          connection.send(JSON.stringify({ type: "pong" }));
+          break;
+        case 'chat':
+          connection.send(
+            JSON.stringify({
+              type: "echo",
+              message: `You said: ${data.message}`,
+            })
+          );
+          break;
+        case 'play':
+          try {
+            RoomManager.playRoom(roomId, playerId);
+            connection.send(JSON.stringify({ type: "game_started" }));
+          } catch (err: any) {
+            connection.send(JSON.stringify({ type: "error", message: err.message }));
+          }
+          break;
+        case 'pause':
+          try {
+            RoomManager.pauseRoom(roomId, playerId);
+            connection.send(JSON.stringify({ type: "game_paused" }));
+          } catch (err: any) {
+            connection.send(JSON.stringify({ type: "error", message: err.message }));
+          }
+          break;
+        case 'move':
+          const dir = Number(data.direction);
+          if (dir !== 1 && dir !== -1) throw new Error("Invalid move direction");
+          try {
+            RoomManager.moveRoom(roomId, playerId, dir);
+          } catch (err: any) {
+            connection.send(JSON.stringify({ type: "error", message: err.message }));
+          }
+          break;
+        default:
+          console.warn("Unknown message type:", type);
       }
     } catch (err) {
       console.error("Invalid message from client:", raw);
+      connection.send(
+        JSON.stringify({ type: "error", message: "Invalid message format" })
+      );
     }
   });
 
   connection.on("close", () => {
-    roomManager.removeClientFromRoom(roomId, connection);
+    RoomManager.disconnectRoom(roomId);
     console.log("Client disconnected");
   });
 });
 
 const port = Number(process.env.PORT ?? 3000);
 fastify.get("/health", async () => ({ status: "ok" }));
+
+// Creates new room
+fastify.post("/rooms", async (req, res) => {
+  const roomId = RoomManager.newRoom();
+  return { roomId, message: "Room created successfully" };
+});
+
+// Join a room
+fastify.post("/rooms/:roomId/join", async (req, res) => {
+  const { roomId } = req.params as { roomId: string };
+  const { playerId } = req.body as { playerId: string };
+
+  try {
+    const playerIndex = RoomManager.joinRoom(roomId, playerId);
+    return { roomId, playerId, playerIndex, message: "Joined room successfully" };
+  } catch (err: any) {
+    res.status(400);
+    return { error: err.message };
+  }
+});
+
+// Get room info
+fastify.get("/rooms/:roomId", async (req, res) => {
+  const { roomId } = req.params as { roomId: string };
+  // Could return room state, player count, etc.
+  return { roomId, message: "Room information" };
+});
 
 fastify.listen({ port }, (err) => {
   if (err) throw err;
