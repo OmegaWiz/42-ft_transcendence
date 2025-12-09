@@ -1,289 +1,55 @@
-# Pong Game Backend Engine
+# Pong Engine – Next.js Backend
 
-WebSocket-based real-time multiplayer Pong game server built with Fastify and @flatten-js/core for physics simulation.
+This package now runs entirely on Next.js 14 route handlers and WebSockets, replacing the previous Fastify servers. The physics/gameplay logic lives in `src/lib`, while the HTTP + WS surface resides in `app/api`.
 
-## Quick Start
+## Development
 
 ```bash
-# Install dependencies
-npm ci
-
-# Build TypeScript
-npm run build
-
-# Development (watch mode with source maps)
-npm run dev
-
-# Production
-npm start
+npm install
+npm run dev   # http://localhost:3000
 ```
+
+Build, lint, and start commands follow standard Next conventions (`npm run build`, `npm run lint`, `npm run start`).
+
+## API Surface
+
+| Route | Method | Description |
+| --- | --- | --- |
+| `/api/health` | `GET` | Returns `{ status: "ok" }` for liveness checks. |
+| `/api/rooms` | `POST` | Creates a room and returns the identifier. |
+| `/api/rooms/[roomId]` | `GET` | Returns `RoomSummary` (players, readiness, latest game state). |
+| `/api/rooms/[roomId]/join` | `POST` | Body `{ "playerId": "p1" }`; reserves slot and echoes index. |
+| `/api/ws` | `GET` (WebSocket) | Real-time control plane supporting `ping`, `chat`, `play`, `pause`, and `move`. |
+
+### WebSocket Contract
+
+- Connect with `ws://localhost:3000/api/ws?roomId=<id>&playerId=<id>` (values auto-generate if omitted).
+- Messages mirror the previous Fastify implementation:
+  - `{ "type": "ping" }` → `{ "type": "pong" }`
+  - `{ "type": "chat", "data": { "message": "..." } }` → `echo`
+  - `{ "type": "play" }`, `{ "type": "pause" }`, `{ "type": "move", "data": { "direction": 1|-1 } }`
+- Server broadcasts `game_state` at 60 FPS while running, plus `score` events when goals are detected.
 
 ## Architecture
 
-The backend provides two implementations:
-
-### 1. Simple Implementation (`room.ts`)
-- Uses `Game` class from `game.ts`
-- Direct paddle control via `moveBarLeft`/`moveBarRight`
-- Simpler state management
-
-### 2. Advanced Implementation (`lobby.ts`) - **Currently Active**
-- `GameBoard` with full game mechanics
-- `PlayerManager` for score tracking
-- `Room` class with game loop
-- More extensible architecture
-
-## REST API
-
-### Health Check
 ```
-GET /health
-Response: { "status": "ok" }
+src/lib/
+├── config.ts          # field/paddle/loop constants
+├── game/game-engine.ts
+├── players/player-manager.ts
+└── rooms/
+    ├── room.ts        # game loop + websocket orchestration
+    └── room-manager.ts
+app/
+├── api/...            # Next.js route handlers for REST + WebSocket
+├── layout.tsx
+└── page.tsx
 ```
 
-### Create Room
-```
-POST /rooms
-Response: { "roomId": "room-123...", "message": "Room created successfully" }
-```
+The `Room` loop now relies on `setTimeout` scheduling so it can run inside the Edge runtime that powers Next’s WebSocket support. All outbound communication uses the standard `WebSocket` interface (no `ws` or Fastify adapters required).
 
-### Join Room
-```
-POST /rooms/:roomId/join
-Body: { "playerId": "player-abc" }
-Response: { "roomId": "room-123", "playerId": "player-abc", "playerIndex": 0, "message": "Joined room successfully" }
-```
+## Migration Notes
 
-### Get Room Info
-```
-GET /rooms/:roomId
-Response: { "roomId": "room-123", "message": "Room information" }
-```
-
-## WebSocket Protocol
-
-### Connection
-```
-ws://localhost:3000/ws?roomId=room-123&playerId=player-abc
-```
-
-### Client → Server Messages
-
-#### Ping/Pong
-```json
-{ "type": "ping" }
-```
-
-#### Start Game
-```json
-{ "type": "play", "data": {} }
-```
-
-#### Pause Game
-```json
-{ "type": "pause", "data": {} }
-```
-
-#### Move Paddle
-```json
-{
-  "type": "move",
-  "data": {
-    "direction": 1  // 1 for up, -1 for down
-  }
-}
-```
-
-#### Chat (Echo Test)
-```json
-{
-  "type": "chat",
-  "data": {
-    "message": "Hello!"
-  }
-}
-```
-
-### Server → Client Messages
-
-#### Welcome
-```json
-{
-  "type": "welcome",
-  "message": "Joined room: room-123",
-  "playerId": "player-abc"
-}
-```
-
-#### Pong Response
-```json
-{ "type": "pong" }
-```
-
-#### Game State (60 FPS during gameplay)
-```json
-{
-  "type": "game_state",
-  "data": {
-    "ball": {
-      "pos": { "x": 400, "y": 300 },
-      "radius": 10
-    },
-    "padLeft": {
-      "start": { "x": 20, "y": 250 },
-      "end": { "x": 20, "y": 350 }
-    },
-    "padRight": {
-      "start": { "x": 780, "y": 250 },
-      "end": { "x": 780, "y": 350 }
-    },
-    "paused": false
-  }
-}
-```
-
-#### Score Event
-```json
-{
-  "type": "score",
-  "data": {
-    "scorer": 0,  // 0 for left player, 1 for right player
-    "scores": [1, 0],
-    "state": { /* current game state */ }
-  }
-}
-```
-
-#### Game Started/Paused
-```json
-{ "type": "game_started" }
-{ "type": "game_paused" }
-```
-
-#### Error
-```json
-{
-  "type": "error",
-  "message": "Room room-123 does not exist"
-}
-```
-
-## Game Mechanics
-
-### Field Dimensions
-- Width: 800px
-- Height: 600px
-
-### Paddle (Bar)
-- Height: 100px
-- Offset from edge: 20px
-- Movement speed: 5px per input
-
-### Ball
-- Radius: 10px
-- Initial position: Center of field
-- Random initial direction
-- Physics: Bounce with tangent projection on collision
-
-### Game Loop
-- Runs at 60 FPS (16.67ms per frame)
-- Started when both players are connected and `play` message received
-- Paused when score occurs or `pause` message received
-
-## Physics Engine (@flatten-js/core)
-
-The game uses geometric collision detection:
-
-```typescript
-// Ball bounce calculation
-const hor = this.dir.projectionOn(seg.tangentInEnd());
-const ver = this.dir.subtract(hor);
-this.dir = hor.add(ver.invert()).normalize();
-
-// Movement via matrix transforms
-const matrix = new Geom.Matrix(1, 0, 0, 1, v.x, v.y);
-this.ball.transform(matrix);
-```
-
-## Player Management
-
-### States
-- **Null Player**: No player in slot
-- **Connected**: Player with active WebSocket connection
-- **Disconnected**: Player slot reserved but connection lost
-
-### Room Ready State
-A room is ready to play when:
-- Both player slots are filled
-- Both players have active connections
-
-## Error Handling
-
-Common errors:
-- `Room {roomId} does not exist` - Invalid room ID
-- `Room {roomId} is not ready to play` - Missing players
-- `Client {playerId} is not a player in room {roomId}` - Unauthorized action
-- `Invalid move direction` - Direction must be 1 or -1
-
-## Development Notes
-
-### ES Module Imports
-Always use `.js` extensions in imports:
-```typescript
-import { Game } from './game.js';  // ✅ Correct
-import { Game } from './game';     // ❌ Wrong
-```
-
-### TypeScript Configuration
-- Strict mode enabled
-- `noUncheckedIndexedAccess: true`
-- `exactOptionalPropertyTypes: true`
-- Module: `nodenext`
-- Target: `esnext`
-
-### File Structure
-```
-srcs/
-  ├── index.ts      # Fastify server & WebSocket handlers
-  ├── lobby.ts      # Advanced: GameBoard, PlayerManager, Room, RoomManager
-  ├── room.ts       # Simple: Room & RoomManager (alternative)
-  └── game.ts       # Core Game class with physics
-```
-
-## Docker Deployment
-
-Multi-stage build for production:
-
-```dockerfile
-# Build
-docker build -t pong-engine .
-
-# Run
-docker run -p 3000:3000 pong-engine
-```
-
-The container exposes port 3000 for both HTTP and WebSocket connections.
-
-## Testing
-
-```bash
-# Start server
-npm run dev
-
-# Test WebSocket connection (using wscat)
-npm install -g wscat
-wscat -c "ws://localhost:3000/ws?roomId=test&playerId=player1"
-
-# Send messages
-> {"type":"ping"}
-< {"type":"pong"}
-
-> {"type":"move","data":{"direction":1}}
-```
-
-## Performance
-
-- 60 FPS game loop per active room
-- Broadcasts game state to all connected players
-- Automatic cleanup on player disconnect
-- No memory leaks from interval cleanup in `pause()`
+- Legacy Fastify servers (`backend/engine`, `app/engine`, `app/server/temp`) have been removed in favor of this single Next.js backend.
+- The physics/gameplay classes are unchanged, ensuring feature parity (paddle motion, scoring, chat echo, ping/pong, etc.).
+- Remember to regenerate `package-lock.json` after running `npm install` locally—the repository no longer tracks the old Fastify lockfile.
