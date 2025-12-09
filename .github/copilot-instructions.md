@@ -9,7 +9,7 @@ This is a TypeScript-based Pong game implementation using HTML5 Canvas and Fasti
 - `src/` - Source TypeScript files
   - `pong.ts` - Main game logic including Canvas, geometry classes (Point, Vector, Line, Ray, Segment), game objects (Pad, Ball), and Game class
   - `index.html` - Game HTML interface
-  - `server.ts` - Fastify server (if exists)
+  - `server.ts` - Fastify server (referenced in package.json dev/start scripts, to be implemented)
 - `public/` - Static files served to the client
 - `dist/` - Compiled JavaScript output (build artifacts, not committed)
 - `tsconfig.json` - TypeScript compiler configuration
