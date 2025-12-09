@@ -2,17 +2,39 @@
 
 ## Project Overview
 
-This is a TypeScript-based Pong game implementation using HTML5 Canvas and Fastify server. The project is part of the 42 ft_transcendence curriculum.
+This is a microserviced backend for a multiplayer Pong game, part of the 42 ft_transcendence curriculum. The system consists of multiple services working together:
+
+- **Lobby Service**: Creates and manages game rooms
+- **Engine Service**: Handles WebSocket game connections and real-time gameplay
+
+The current codebase contains a TypeScript-based Pong game implementation using HTML5 Canvas and Fastify server as a foundation.
 
 ## Project Structure
 
+### Microservice Architecture
+
+The project is designed as a microserviced backend with the following services:
+
+- **Lobby Service**: 
+  - Creates and manages game rooms
+  - Handles room creation, joining, and matchmaking
+  - Manages player queues and room state
+
+- **Engine Service**:
+  - Provides WebSocket connections for real-time gameplay
+  - Handles game state synchronization
+  - Processes player inputs and physics calculations
+
+### Current Implementation
+
 - `src/` - Source TypeScript files
-  - `pong.ts` - Main game logic including Canvas, geometry classes (Point, Vector, Line, Ray, Segment), game objects (Pad, Ball), and Game class
+  - `pong.ts` - Game logic foundation including Canvas, geometry classes (Point, Vector, Line, Ray, Segment), game objects (Pad, Ball), and Game class
   - `index.html` - Game HTML interface
-  - `server.ts` - Fastify server (referenced in package.json dev/start scripts, to be implemented)
+  - `server.ts` - Fastify server entry point (to be implemented as service orchestrator)
 - `public/` - Static files served to the client
 - `dist/` - Compiled JavaScript output (build artifacts, not committed)
 - `tsconfig.json` - TypeScript compiler configuration
+- `temp/` - Experimental code and prototypes
 
 ## Build and Development Commands
 
@@ -22,6 +44,14 @@ This is a TypeScript-based Pong game implementation using HTML5 Canvas and Fasti
 - **Type checking**: `npm run type-check` - Runs TypeScript compiler without emitting files
 
 ## Code Style and Conventions
+
+### Microservice Patterns
+
+- Design services to be independently deployable and scalable
+- Use WebSocket for real-time bidirectional communication in the Engine service
+- Implement proper service boundaries and communication protocols
+- Use environment variables for service configuration
+- Implement health check endpoints for each service
 
 ### TypeScript
 
@@ -96,8 +126,13 @@ draw(canvas: Canvas) {
 
 ## Dependencies
 
-- **Runtime**: Fastify, @fastify/static, @fastify/websocket
+- **Runtime**: Fastify (web server), @fastify/static (static files), @fastify/websocket (WebSocket support)
 - **Development**: TypeScript, ts-node, nodemon, @types packages
+
+### Service-Specific Dependencies
+
+- **Lobby Service**: Will require database/state management for room tracking
+- **Engine Service**: WebSocket for real-time game connections, game physics engine
 
 ## Notes
 
